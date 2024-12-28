@@ -1,4 +1,4 @@
-# NextPush - Server App
+# UnifiedPush Notifications - Server App
 
 Send Nextcloud Notifications via UnifiedPush provider app.
 

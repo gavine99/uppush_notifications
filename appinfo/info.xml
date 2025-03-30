@@ -12,6 +12,6 @@
     <bugs></bugs>
     <repository type="git"></repository>
     <dependencies>
-        <nextcloud min-version="20" max-version="30"/>
+        <nextcloud min-version="20" max-version="32"/>
     </dependencies>
 </info>

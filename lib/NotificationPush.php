@@ -8,7 +8,6 @@ use OCA\UnifiedPushProvider\Device\Device;
 use OCA\UnifiedPushProvider\Device\Event;
 use OCA\UnifiedPushProvider\Device\EventType;
 use OCA\UnifiedPushProvider\Device\Urgency;
-use \OCA\UnifiedPushProvider\Request\RequestTtl;
 use OCA\Notifications\Handler as NotificationsHandler;
 use OCA\Notifications\FakeUser;
 use OCP\Notification\IApp as INotificationApp;
@@ -34,10 +33,9 @@ class NotificationPush implements INotificationApp
 	public const WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME = 'com.nextcloud.talk2';
 
 	/**
-	 * @var ?IUserStatus[]
 	 * @psalm-var array<string, ?IUserStatus>
 	 */
-	protected ?array $userStatuses = [];
+	protected array $userStatuses = [];
 
 	public function __construct(
 		protected IDBConnection $db,
@@ -72,117 +70,137 @@ class NotificationPush implements INotificationApp
 		return false;		// assume false in case of problems
 	}
 
-	protected function getUniqueNotificationId($notification): ?int {
+	// use 'main' nextcloud app to get possibly mutliple notifications from 
+	// a single notification object
+	protected function unpackNotification(INotification $notification): array {
+		// this app has to follow the lead of the 'main' nextcloud notification 
+		// app which can have multiple notifications 'packed' into a single 
+		// notification object. urgh.
+		// use it's 'multi-notification' unpack logic here
 		$notificationsHandler = null;
 		try {
 			$notificationsHandler = Server::get(NotificationsHandler::class);
-		} catch (\Exception|NotFoundExceptionInterface|ContainerExceptionInterface $e) {
-		}
+		} catch (\Exception | 
+						 NotFoundExceptionInterface | 
+						 ContainerExceptionInterface $e
+		) { /* nothing */ }
+
 		if ($notificationsHandler === null) {
-			return null;
+			return [];
 		}
 
-		// the unique id will be the key of the first notification that matches the notification being processed
-		$dbNotifications = $notificationsHandler->get($notification, 1);
-		if (count($dbNotifications) === 0) {
-			return null;
-		}
-
-		return array_keys($dbNotifications)[0];
+		return $notificationsHandler->get($notification, PHP_INT_MAX);
 	}
 
 	public function notify(INotification $notification): void {
-		// get unique notification id early so we don't do a lot of other work and then find the unique id
-		// isn't available
-		$notificationUniqueId = $this->getUniqueNotificationId($notification);
-		if ($notificationUniqueId === null) {
-			return;
-		}
-
 		// get fake user record
 		$user = new FakeUser($notification->getUser());
 
-		// cache user status in case of multiple notifications being sent in a higher level loop
-		if (array_key_exists($notification->getUser(), $this->userStatuses) === false) {
-			$userStatus = $this->userStatusManager->getUserStatuses([$notification->getUser()]);
-			$this->userStatuses[$notification->getUser()] = $userStatus[$notification->getUser()] ?? null;
-		}
+		// unpack possible 'multi-notification' to a list of notifications
+		$notifications = $this->unpackNotification($notification);
 
-		// if user status is set to do not disturb, return without sending
-		if (isset($this->userStatuses[$notification->getUser()])) {
-			$userStatus = $this->userStatuses[$notification->getUser()];
-			if ($userStatus instanceof IUserStatus
-				&& $userStatus->getStatus() === IUserStatus::DND
-				&& empty($this->allowedDNDPushList[$notification->getApp()])) {
-				return;
+		// for each notification
+		foreach ($notifications as $notificationId => $notification) {
+			// if user isset to do not disturb and notification is not priority, do not send
+			if (!array_key_exists($notification->getUser(), $this->userStatuses)) {
+				$userStatus = $this->userStatusManager->getUserStatuses([
+					$notification->getUser(),
+				]);
+
+				$this->userStatuses[$notification->getUser()] = $userStatus[$notification->getUser()] ?? null;
 			}
-		}
 
-		// prepare the notification message
-		if (!$notification->isValidParsed()) {
-			$language = $this->l10nFactory->getUserLanguage($user);
-
-			try {
-				$this->notificationManager->setPreparingPushNotification(true);
-				$notification = $this->notificationManager->prepare($notification, $language);
-				$this->notificationManager->setPreparingPushNotification(false);
-			} catch (AlreadyProcessedException|IncompleteParsedNotificationException|\InvalidArgumentException) {
-				// FIXME remove \InvalidArgumentException in Nextcloud 39
-				return;
+			if (isset($this->userStatuses[$notification->getUser()])) {
+				$userStatus = $this->userStatuses[$notification->getUser()];
+				if ($userStatus instanceof IUserStatus
+					&& $userStatus->getStatus() === IUserStatus::DND
+					&& !$notification->isPriorityNotification()) {
+					continue;
+				}
 			}
+
+			// prepare the notification message if not yet prepared
+			if (!$notification->isValidParsed()) {
+				$language = $this->l10nFactory->getUserLanguage($user);
+
+				try {
+					$this->notificationManager->setPreparingPushNotification(true);
+					$notification = $this->notificationManager->prepare(
+						$notification, 
+						$language
+					);
+					$this->notificationManager->setPreparingPushNotification(false);
+				} catch (AlreadyProcessedException | 
+								 IncompleteParsedNotificationException | 
+								 \InvalidArgumentException
+				) {
+					// FIXME remove \InvalidArgumentException in Nextcloud 39
+					return;
+				}
+			}
+
+			$data = [
+				'nid' => $notificationId,
+				'app' => $notification->getApp(),
+				'subject' => $notification->getParsedSubject(),
+				'type' => $notification->getObjectType(),
+				'id' => $notification->getObjectId(),
+			];
+
+			$this->pushArrayToUser(
+				$notification->getUser(), 
+				$data, 
+				$notification->getApp()
+			);
 		}
-
-		$data = [
-			'nid' => $notificationUniqueId,
-			'app' => $notification->getApp(),
-			'subject' => $notification->getParsedSubject(),
-			'type' => $notification->getObjectType(),
-			'id' => $notification->getObjectId(),
-		];
-
-		$this->pushArrayToUser($notification->getUser(), $data, $notification->getApp());
-	}
-
-	public function notifyDelete(string $user, ?int $id, ?INotification $notification): void
-	{
-		// if we don't have the unique id for the notification we can't accomplish anything, return now
-		if ($id === null) {
-			return;
-		}
-
-		$data = [
-			'nid' => $id,
-			'delete' => true
-		];
-
-		$this->pushArrayToUser($user, $data, $notification->getApp());
 	}
 
 	public function markProcessed(INotification $notification): void {
-		// get unique notification id if it's available in the Nextcloud Notification app
-		$notificationUniqueId = $this->getUniqueNotificationId($notification);
-		if ($notificationUniqueId === null)
-			return;
+		// unpack possible 'multi-notification' to a list of notifications
+		$notifications = $this->unpackNotification($notification);
 
-		$this->notifyDelete($notification->getUser(), $notificationUniqueId, $notification);
+		// for each notification
+		foreach ($notifications as $notificationId => $notification) {
+			// push delete notification
+			$this->pushArrayToUser(
+				$notification->getUser(), 
+				[ 'nid' => $notificationId, 'delete' => true ], 
+				$notification->getApp()
+			);
+		}
 	}
 
 	public function getCount(INotification $notification): int {
 		return 0;		// return 0 because notifications are not held on to
 	}
 
-	public function pushArrayToUser(string $user, array $dataArray, string $notificationApp): void {
+	public function pushArrayToUser(
+		string $user, 
+		array $dataArray, 
+		string $notificationApp
+	): void {
 		$result = null;
 
 		// if this is a talk notification, only send to talk devices, if any, for user
-		$isTalkNotification = \in_array($notificationApp, ['spreed', 'talk', 'admin_notification_talk'], true);
+		$isTalkNotification = \in_array(
+			$notificationApp, 
+			['spreed', 'talk', 'admin_notification_talk'], 
+			true
+		);
 		if ($isTalkNotification) {
-			$result = $this->getDevicesAndTokensForUserAndApp($user, NotificationPush::WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME);
+			$result = $this->getDevicesAndTokensForUserAndApp(
+				$user, 
+				NotificationPush::WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME
+			);
 		}
 
-		// not a talk app notification OR no talk devices found for user, try and find registered nc client devices for user
+		// not a talk app notification OR no talk devices found for user, 
+		// try and find registered nc client devices for user
 		if (!$result?->rowCount()) {
-			$result = $this->getDevicesAndTokensForUserAndApp($user, NotificationPush::WELL_KNOWN_NEXTCLOUD_CLIENT_APP_NAME);
+			$result = $this->getDevicesAndTokensForUserAndApp(
+				$user, 
+				NotificationPush::WELL_KNOWN_NEXTCLOUD_CLIENT_APP_NAME
+			);
 		}
 
 		// no registered device for app that notification relates to, exit now
@@ -203,17 +221,19 @@ class NotificationPush implements INotificationApp
 				Device::withDevice(
 					$this->context,
 					$row['device_id'],
-					function(Device $device) use ($message) {
-						return $device->push($message, (24 * 60 * 60) /* ttl 1 day */, Urgency::High, null);
-					},
+					fn($device): mixed => $device->push($message, (24 * 60 * 60) /* ttl 1 day */, Urgency::High, null),
 				);
 			} catch (\Exception $e) {
 			}
 		}
+
 		$result->closeCursor();
 	}
 
-	protected function getDevicesAndTokensForUserAndApp(string $user, string $appName): ?IResult {
+	protected function getDevicesAndTokensForUserAndApp(
+		string $user, 
+		string $appName
+	): ?IResult {
 		try {
 			// get device_ids and tokens from db for user and app name
 			$query = $this->db->getQueryBuilder();

@@ -20,4 +20,4 @@ Install into your Nextcloud apps directory and, as Admin, enable the app. There 
 
 ## Development
 
-Clone the repository to __nextcloud/apps/uppush-notifications__.
+Clone the repository to __nextcloud/apps/uppush_notifications__.

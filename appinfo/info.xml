@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <info xmlns:xsi= "http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
-    <id>uppush-notifications</id>
+    <id>uppush_notifications</id>
     <name>UnifiedPush Notifications</name>
     <summary>Use Nextcloud UnifiedPush app to push Nextcloud notifications</summary>
     <description><![CDATA[Requires the UnifiedPush and Notifications Nextcloud apps to be installed and configured. Will push system notifications via UnifiedPush]]></description>

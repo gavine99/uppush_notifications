@@ -13,7 +13,7 @@ use OCP\Notification\IManager as INotificationManager;
 use OCA\UpPushNotifications\NotificationPush;
 
 class Application extends App implements IBootstrap {
-    public const APP_ID = 'uppush-notifications';
+    public const APP_ID = 'uppush_notifications';
 
     public function __construct() {
         parent::__construct(self::APP_ID);

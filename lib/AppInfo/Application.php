@@ -10,7 +10,7 @@ use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use Psr\Container\ContainerInterface;
 use OCP\Notification\IManager as INotificationManager;
-use OCA\UpPushNotifications\NotificationPush;
+use OCA\UpPushNotifications\UpPushNotifications;
 
 class Application extends App implements IBootstrap {
     public const APP_ID = 'uppush_notifications';
@@ -23,6 +23,7 @@ class Application extends App implements IBootstrap {
 	 * @param IRegistrationContext $context
 	 */
 	public function register(IRegistrationContext $context): void {
+		$context->registerNotifierService(UpPushNotifications::class);
 	}
 
 	/**
@@ -30,17 +31,17 @@ class Application extends App implements IBootstrap {
 	 */
 	public function boot(IBootContext $context): void {
 		// do nothing if UnifiedPush app is not available
-		if (NotificationPush::isUpPushAppAvailable() === false)
+		if (UpPushNotifications::isUpPushAppAvailable() === false)
 			return;
 
 		// if notifications app is installed and enabled, and it's handler class is available to use
 		// then register to handle notification messages
-		if (NotificationPush::isNotificationsAppAvailable() === true) {
+		if (UpPushNotifications::isNotificationsAppAvailable() === true) {
 			$context->injectFn($this->registerAppAndNotifier(...));
 		}
 	}
 
 	public function registerAppAndNotifier(INotificationManager $notificationManager): void {
-		$notificationManager->registerApp(NotificationPush::class);
+		$notificationManager->registerApp(UpPushNotifications::class);
 	}
 }

@@ -15,6 +15,7 @@ use OCP\App\IAppManager;
 use OCP\IDBConnection;
 use OCP\DB\IResult;
 use OCP\Notification\AlreadyProcessedException;
+use OCP\Notification\IDismissableNotifier;
 use OCP\Notification\IncompleteParsedNotificationException;
 use OCP\Notification\INotification;
 use OCP\L10N\IFactory;
@@ -27,14 +28,14 @@ use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
 
 
-class NotificationPush implements INotificationApp
+
+class UpPushNotifications implements INotificationApp, IDismissableNotifier
 {
 	public const WELL_KNOWN_NEXTCLOUD_CLIENT_APP_NAME = 'com.nextcloud.client';
 	public const WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME = 'com.nextcloud.talk2';
+	public const DISMISSABLE_NOTIFIER_ID = 'uppush_notifications';
+	public const DISMISSABLE_NOTIFIER_NAME = 'UpPush Notifications';
 
-	/**
-	 * @psalm-var array<string, ?IUserStatus>
-	 */
 	protected array $userStatuses = [];
 
 	public function __construct(
@@ -190,7 +191,7 @@ class NotificationPush implements INotificationApp
 		if ($isTalkNotification) {
 			$result = $this->getDevicesAndTokensForUserAndApp(
 				$user, 
-				NotificationPush::WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME
+				UpPushNotifications::WELL_KNOWN_NEXTCLOUD_TALK_APP_NAME
 			);
 		}
 
@@ -199,7 +200,7 @@ class NotificationPush implements INotificationApp
 		if (!$result?->rowCount()) {
 			$result = $this->getDevicesAndTokensForUserAndApp(
 				$user, 
-				NotificationPush::WELL_KNOWN_NEXTCLOUD_CLIENT_APP_NAME
+				UpPushNotifications::WELL_KNOWN_NEXTCLOUD_CLIENT_APP_NAME
 			);
 		}
 
@@ -248,4 +249,21 @@ class NotificationPush implements INotificationApp
 
 		return null;
 	}
+
+	public function getID(): string {
+		return UpPushNotifications::DISMISSABLE_NOTIFIER_ID;
+	}
+
+	public function getName(): string {
+		return UpPushNotifications::DISMISSABLE_NOTIFIER_NAME;
+	}
+
+	public function prepare(INotification $notification, string $languageCode): INotification {
+		return $notification;
+	}
+
+	public function dismissNotification(INotification $notification): void {
+		$this->markProcessed($notification);
+	}
+
 }

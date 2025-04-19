@@ -8,7 +8,7 @@ Send Nextcloud Notifications via UnifiedPush provider app.
 * The 'main' Nextcloud Notifications app (https://github.com/nextcloud/notifications)
 * The UnifiedPush app (https://apps.nextcloud.com/apps/uppush)
 
-To have the best reliability for this app you need pull request https://github.com/nextcloud/server/pull/51800 which has been merged into nextcloud server mainline and will flow trough to release in time. Until then you can patch it in yourself quite easily.
+To have the best reliability for this app you need nextcloud server pull request https://github.com/nextcloud/server/pull/51800 which has been merged into mainline and will flow through to release in time. Until then you can patch it in yourself quite easily.
 
 ## Installation
 

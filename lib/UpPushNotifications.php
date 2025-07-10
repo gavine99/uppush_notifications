@@ -71,13 +71,9 @@ class UpPushNotifications implements INotificationApp, IDismissableNotifier
 		return false;		// assume false in case of problems
 	}
 
-	// use 'main' nextcloud app to get possibly mutliple notifications from 
-	// a single notification object
+	// use 'main' nextcloud app to unpack mutliple notifications from a single
+	// notification object
 	protected function unpackNotification(INotification $notification): array {
-		// this app has to follow the lead of the 'main' nextcloud notification 
-		// app which can have multiple notifications 'packed' into a single 
-		// notification object. urgh.
-		// use it's 'multi-notification' unpack logic here
 		$notificationsHandler = null;
 		try {
 			$notificationsHandler = Server::get(NotificationsHandler::class);
@@ -97,7 +93,7 @@ class UpPushNotifications implements INotificationApp, IDismissableNotifier
 		// get fake user record
 		$user = new FakeUser($notification->getUser());
 
-		// unpack possible 'multi-notification' to a list of notifications
+		// unpack possible 'multi-notification' to a list of individual notifications
 		$notifications = $this->unpackNotification($notification);
 
 		// for each notification
@@ -172,7 +168,8 @@ class UpPushNotifications implements INotificationApp, IDismissableNotifier
 	}
 
 	public function getCount(INotification $notification): int {
-		return 0;		// return 0 because notifications are not held on to
+		// return 0 because notifications are never held on to
+		return 0;
 	}
 
 	public function pushArrayToUser(

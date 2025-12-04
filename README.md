@@ -2,6 +2,8 @@
 
 Send Nextcloud Notifications via UnifiedPush provider app.
 
+This app will be deprecated if and when PRs for nextcloud server and apps are completed, accepted and merged. See https://github.com/nextcloud/android/issues/8684#issuecomment-3614567388
+
 ## Dependencies
 
 * Nextcloud (https://github.com/nextcloud/server)
